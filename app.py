@@ -129,13 +129,7 @@ def get_network_id_by_colegio(colegio, networks):
     return None
 
 def admin_tiene_acceso(admin: dict, network_id: str) -> bool:
-    """
-    Retorna True si el admin tiene acceso a la red indicada.
-    Un admin puede tener acceso de dos formas:
-      1. orgAccess = "full"  → acceso completo a toda la organización
-      2. networks[]          → lista de redes específicas a las que tiene acceso
-    """
-    if admin.get("orgAccess") == "full":
+    if admin.get("orgAccess") in ("full", "read-only", "observer"):
         return True
     redes_con_acceso = [t.get("id") for t in admin.get("networks", [])]
     return network_id in redes_con_acceso
