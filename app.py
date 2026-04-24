@@ -26,22 +26,23 @@ MERAKI_HEADERS = {
 
 # ---------------------------------------------------------------------------
 # MAPPING COLEGIO → NOMBRE DE RED MERAKI
+# Sin tildes ni caracteres especiales para evitar problemas de encoding
+# Los valores del dropdown de Freshdesk deben coincidir exactamente con estas keys
 # ---------------------------------------------------------------------------
 COLEGIO_TO_NETWORK_NAME = {
-    "SIP CENTRAL":                   "SIP Central",
-    "Arturo Matte Larraín Básica":   "Red - AMLB",
+    "Arturo Matte Larrain Basica":   "Red - AMLB",
     "Arturo Matte Larrain Media":    "Red - AMLM",
     "Arturo Toro Amor":              "Red - ATA",
-    "Claudio Matte Pérez":           "Red - CM",
+    "Claudio Matte Perez":           "Red - CM",
     "Elvira Hurtado de Matte":       "Red - EHM",
     "Eliodoro Matte Ossa":           "Red - EMO",
-    "Francisco Arriarán":            "Red - FA",
+    "Francisco Arriaran":            "Red - FA",
     "Francisco Olea":                "Red - FO",
     "Guillermo Matta":               "Red - GM",
     "Instituto Hermanos Matte":      "Red - IHM",
-    "José Agustín Alfonso":          "Red - JAA",
-    "Jorge Alessandri Rodríguez":    "Red - JAR",
-    "José Joaquín Prieto":           "Red - JJP",
+    "Jose Agustin Alfonso":          "Red - JAA",
+    "Jorge Alessandri Rodriguez":    "Red - JAR",
+    "Jose Joaquin Prieto":           "Red - JJP",
     "Liceo Bicentenario Italia":     "Red - LBI",
     "Los Nogales":                   "Red - LN",
     "Presidente Alessandri":         "Red - PA",
@@ -129,6 +130,10 @@ def get_network_id_by_colegio(colegio, networks):
     return None
 
 def admin_tiene_acceso(admin: dict, network_id: str) -> bool:
+    """
+    Retorna True si el admin tiene acceso a la red indicada con cualquier rol.
+    El cambio se ejecuta con la API key del admin (MERAKI_API_KEY).
+    """
     if admin.get("orgAccess") in ("full", "read-only", "observer"):
         return True
     redes_con_acceso = [t.get("id") for t in admin.get("networks", [])]
@@ -167,7 +172,7 @@ def freshdesk_close_ticket(ticket_id: str):
     return http_json("PUT", url, headers=_freshdesk_headers(), json=payload)
 
 # ---------------------------------------------------------------------------
-# ENTRY POINT — compatible con Flask local Y Google Cloud Functions
+# ENTRY POINT — compatible con Flask local Y Google Cloud Run
 # ---------------------------------------------------------------------------
 @app.route("/", methods=["GET"])
 def home():
@@ -176,12 +181,6 @@ def home():
 
 @app.route("/webhook/freshdesk", methods=["GET"])
 def webhook_freshdesk(request=None):
-    """
-    Webhook principal.
-    - En Flask local:        el decorador @app.route inyecta el request de Flask.
-    - En Google Cloud Func:  GCF llama directamente a esta función pasando request.
-    El parámetro `request=None` permite ambos modos sin cambiar código.
-    """
     # --- Soporte dual Flask / GCF ---
     if request is None:
         from flask import request as flask_request
@@ -237,18 +236,16 @@ def webhook_freshdesk(request=None):
         return jsonify({
             "error": "red_no_encontrada",
             "colegio": colegio,
-            "hint": f"Verifica que '{colegio}' exista en COLEGIO_TO_NETWORK_NAME"
+            "colegios_validos": list(COLEGIO_TO_NETWORK_NAME.keys()),
         }), 404
 
     # -----------------------------------------------------------------------
-    # 3. Verificar que el solicitante sea admin con acceso a esa red
-    #    (Los admins en Meraki son a nivel de organización, no de red)
+    # 3. Verificar que el solicitante tenga acceso a esa red en Meraki
     # -----------------------------------------------------------------------
     st, admins = meraki_get_org_admins()
     if st != 200:
         return jsonify({"error": "meraki_admins_failed", "status": st, "detalle": admins}), 502
 
-    # Construir lista de emails que tienen acceso a esta red específica
     emails_con_acceso = [
         a.get("email", "").strip().lower()
         for a in (admins or [])
@@ -347,7 +344,7 @@ def webhook_freshdesk(request=None):
 
 # ---------------------------------------------------------------------------
 # ARRANQUE LOCAL
-# En Google Cloud Functions este bloque es ignorado automáticamente.
+# En Google Cloud Run este bloque es ignorado automáticamente.
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
